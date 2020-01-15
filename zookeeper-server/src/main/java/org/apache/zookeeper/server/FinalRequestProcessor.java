@@ -100,6 +100,8 @@ public class FinalRequestProcessor implements RequestProcessor {
         }
         ProcessTxnResult rc = null;
         synchronized (zks.outstandingChanges) {
+            //这里用来将之前的PreProcessor处理器处理的请求进行去除，包括父节点
+            //在这里父节点只是改变了一些附加的信息它只要在处理子节点时 进行更新
             while (!zks.outstandingChanges.isEmpty()
                     && zks.outstandingChanges.get(0).zxid <= request.zxid) {
                 ChangeRecord cr = zks.outstandingChanges.remove(0);
@@ -113,9 +115,10 @@ public class FinalRequestProcessor implements RequestProcessor {
                 }
             }
             if (request.hdr != null) {
+                //取出请求头信息 与 请求体内容
                TxnHeader hdr = request.hdr;
                Record txn = request.txn;
-
+                //在内存中处理子节点与更新父节点内容
                rc = zks.processTxn(hdr, txn);
             }
             // do not add non quorum packets to the queue.
@@ -123,7 +126,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                 zks.getZKDatabase().addCommittedProposal(request);
             }
         }
-
+        //closeSession 相关处理 --
         if (request.hdr != null && request.hdr.getType() == OpCode.closeSession) {
             ServerCnxnFactory scxn = zks.getServerCnxnFactory();
             // this might be possible since
@@ -144,8 +147,10 @@ public class FinalRequestProcessor implements RequestProcessor {
         ServerCnxn cnxn = request.cnxn;
 
         String lastOp = "NA";
+        //
         zks.decInProcess();
         Code err = Code.OK;
+        //创建响应信息对象
         Record rsp = null;
         boolean closeSession = false;
         try {
@@ -219,6 +224,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             }
             case OpCode.create: {
                 lastOp = "CREA";
+                //
                 rsp = new CreateResponse(rc.path);
                 err = Code.get(rc.err);
                 break;
@@ -408,14 +414,17 @@ public class FinalRequestProcessor implements RequestProcessor {
         }
 
         long lastZxid = zks.getZKDatabase().getDataTreeLastProcessedZxid();
+        //构建响应头信息
         ReplyHeader hdr =
             new ReplyHeader(request.cxid, lastZxid, err.intValue());
 
         zks.serverStats().updateLatency(request.createTime);
+        // 更新信息
         cnxn.updateStatsForResponse(request.cxid, lastZxid, lastOp,
                     request.createTime, Time.currentElapsedTime());
 
         try {
+            //处理返回给客户端的信息
             cnxn.sendResponse(hdr, rsp, "response");
             if (closeSession) {
                 cnxn.sendCloseSession();

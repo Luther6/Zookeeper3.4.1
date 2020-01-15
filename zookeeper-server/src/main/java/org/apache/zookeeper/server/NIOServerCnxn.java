@@ -183,6 +183,7 @@ public class NIOServerCnxn extends ServerCnxn {
                 LOG.trace("Add a buffer to outgoingBuffers, sk " + sk
                         + " is valid: " + sk.isValid());
             }
+            //存放
             outgoingBuffers.add(bb);
             if (sk.isValid()) {
                 sk.interestOps(sk.interestOps() | SelectionKey.OP_WRITE);
@@ -203,11 +204,13 @@ public class NIOServerCnxn extends ServerCnxn {
         }
 
         if (incomingBuffer.remaining() == 0) { // have we read length bytes?
+            //预处理请求 :增加接受请求数量等
             packetReceived();
             incomingBuffer.flip();
             if (!initialized) {
                 readConnectRequest();
             } else {
+                //处理请求
                 readRequest();
             }
             lenBuffer.clear();
@@ -242,7 +245,7 @@ public class NIOServerCnxn extends ServerCnxn {
 
                 return;
             }
-            if (k.isReadable()) {
+            if (k.isReadable()) {  //读就绪  用来处理客户端发送的请求
                 int rc = sock.read(incomingBuffer);
                 if (rc < 0) {
                     throw new EndOfStreamException(
@@ -261,6 +264,7 @@ public class NIOServerCnxn extends ServerCnxn {
                         isPayload = true;
                     }
                     if (isPayload) { // not the case for 4letterword
+                        //处理请求
                         readPayload();
                     }
                     else {
@@ -270,12 +274,12 @@ public class NIOServerCnxn extends ServerCnxn {
                     }
                 }
             }
-            if (k.isWritable()) {
+            if (k.isWritable()) {  //写就绪 处理需要响应给客户端的信息
                 // ZooLog.logTraceMessage(LOG,
                 // ZooLog.CLIENT_DATA_PACKET_TRACE_MASK
                 // "outgoingBuffers.size() = " +
                 // outgoingBuffers.size());
-                if (outgoingBuffers.size() > 0) {
+                if (outgoingBuffers.size() > 0) {  //outgoingBuffers
                     // ZooLog.logTraceMessage(LOG,
                     // ZooLog.CLIENT_DATA_PACKET_TRACE_MASK,
                     // "sk " + k + " is valid: " +
@@ -291,6 +295,7 @@ public class NIOServerCnxn extends ServerCnxn {
                     directBuffer.clear();
 
                     for (ByteBuffer b : outgoingBuffers) {
+                        // 之后看
                         if (directBuffer.remaining() < b.remaining()) {
                             /*
                              * When we call put later, if the directBuffer is to
@@ -319,7 +324,7 @@ public class NIOServerCnxn extends ServerCnxn {
                      * 0. This sets us up for the write.
                      */
                     directBuffer.flip();
-
+                    //向客户端发送响应信息
                     int sent = sock.write(directBuffer);
                     ByteBuffer bb;
 
@@ -348,6 +353,7 @@ public class NIOServerCnxn extends ServerCnxn {
                     // outgoingBuffers.size() = " + outgoingBuffers.size());
                 }
 
+                //NIO知识
                 synchronized(this.factory){
                     if (outgoingBuffers.size() == 0) {
                         if (!initialized
@@ -1116,8 +1122,10 @@ public class NIOServerCnxn extends ServerCnxn {
             BinaryOutputArchive bos = BinaryOutputArchive.getArchive(baos);
             try {
                 baos.write(fourBytes);
+                //序列化响应头信息
                 bos.writeRecord(h, "header");
                 if (r != null) {
+                    // 序列化响应内容
                     bos.writeRecord(r, tag);
                 }
                 baos.close();
@@ -1127,6 +1135,8 @@ public class NIOServerCnxn extends ServerCnxn {
             byte b[] = baos.toByteArray();
             ByteBuffer bb = ByteBuffer.wrap(b);
             bb.putInt(b.length - 4).rewind();
+            //把请响应信息流对象存放到队列中 outgoingBuffers
+            // 该队列将会由我们的服务端处理请求的入口线程NIOServerCnxnFactory的run方法来处理
             sendBuffer(bb);
             if (h.getXid() > 0) {
                 synchronized(this){

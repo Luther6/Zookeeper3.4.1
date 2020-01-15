@@ -79,6 +79,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         super("SyncThread:" + zks.getServerId(), zks
                 .getZooKeeperServerListener());
         this.zks = zks;
+        //设置下一个处理器
         this.nextProcessor = nextProcessor;
         running = true;
     }
@@ -119,15 +120,18 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
             int logCount = 0;
 
             // we do this in an attempt to ensure that not all of the servers
-            // in the ensemble take a snapshot at the same time
+            // in the ensemble take a snapshot at the same time  不懂
             setRandRoll(r.nextInt(snapCount/2));
             while (true) {
                 Request si = null;
                 if (toFlush.isEmpty()) {
+                    //如果不为空就获取上一个处理存放的提交的请求
                     si = queuedRequests.take();
                 } else {
+                    //堆栈弹出
                     si = queuedRequests.poll();
                     if (si == null) {
+                        //处理请求
                         flush(toFlush);
                         continue;
                     }
@@ -136,9 +140,10 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                     break;
                 }
                 if (si != null) {
-                    // track the number of records written to the log
+                    // track the number of records written to the log  生成基础事务日志文件记录
                     if (zks.getZKDatabase().append(si)) {
                         logCount++;
+                        //事务日志生成的规则 之后看
                         if (logCount > (snapCount / 2 + randRoll)) {
                             setRandRoll(r.nextInt(snapCount/2));
                             // roll the log
@@ -164,7 +169,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                         // optimization for read heavy workloads
                         // iff this is a read, and there are no pending
                         // flushes (writes), then just pass this to the next
-                        // processor
+                        // processor  不懂应该是对读写模式时的优化之后看
                         if (nextProcessor != null) {
                             nextProcessor.processRequest(si);
                             if (nextProcessor instanceof Flushable) {
@@ -173,8 +178,10 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                         }
                         continue;
                     }
+                    //存放到toFlush 等待刷新到内存中
                     toFlush.add(si);
                     if (toFlush.size() > 1000) {
+                        // 不懂
                         flush(toFlush);
                     }
                 }
@@ -191,11 +198,12 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
     {
         if (toFlush.isEmpty())
             return;
-
+        //提交事务日志
         zks.getZKDatabase().commit();
         while (!toFlush.isEmpty()) {
             Request i = toFlush.remove();
             if (nextProcessor != null) {
+                //FinalRequestProcessor  处理请求
                 nextProcessor.processRequest(i);
             }
         }

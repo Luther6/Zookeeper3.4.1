@@ -80,15 +80,25 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     @Override
     public void configure(InetSocketAddress addr, int maxcc) throws IOException {
         configureSaslLogin();
-
+        //用来处理zk系统异常的线程 注意注意!!! 这里的this 是指当前的Thread 。基础没掌握好。就是启动的当前的类。
         thread = new ZooKeeperThread(this, "NIOServerCxn.Factory:" + addr);
+        //同样使守护线程
         thread.setDaemon(true);
         maxClientCnxns = maxcc;
+        //打开本机SocketChannel
         this.ss = ServerSocketChannel.open();
+        //开启套接字超时连接
+        /**
+         * 当TCP连接关闭时，连接可能会在连接关闭后的一段时间内保持超时状态（通常称为TIME_WAIT状态或2MSL等待状态）。
+         * 对于使用众所周知的套接字地址或端口的应用程序，如果在超时状态下存在涉及套接字地址或端口的连接，则可能无法将套接字绑定到所需的SocketAddress。
+         * 在使用bind（SocketAddress）绑定套接字之前启用SO_REUSEADDR，即使先前的连接处于超时状态，也可以绑定套接字。
+         */
         ss.socket().setReuseAddress(true);
         LOG.info("binding to port " + addr);
         ss.socket().bind(addr);
+        //设置非阻塞
         ss.configureBlocking(false);
+        //在该通道上注册OP_ACCEPT 监听
         ss.register(selector, SelectionKey.OP_ACCEPT);
     }
 
@@ -106,6 +116,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     public void start() {
         // ensure thread is started once and only once
         if (thread.getState() == Thread.State.NEW) {
+            //启动当前的NioServerCnxnFactory线程
             thread.start();
         }
     }
@@ -113,9 +124,13 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     @Override
     public void startup(ZooKeeperServer zks) throws IOException,
             InterruptedException {
+        //启动异常处理线程 与NIOServerCnxnFactory线程
         start();
+        //设置请求处理程序
         setZooKeeperServer(zks);
+        //装载持久化到本地的数据进内存 DataTree? 红黑树还是什么树之后看
         zks.startdata();
+        //启动Server服务线程
         zks.startup();
     }
 
@@ -203,10 +218,12 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                 selector.select(1000);
                 Set<SelectionKey> selected;
                 synchronized (this) {
+                    //返回此选择器的选择键集。 NIO
                     selected = selector.selectedKeys();
                 }
                 ArrayList<SelectionKey> selectedList = new ArrayList<SelectionKey>(
                         selected);
+                //打乱顺序
                 Collections.shuffle(selectedList);
                 for (SelectionKey k : selectedList) {
                     if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
@@ -229,7 +246,9 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                             addCnxn(cnxn);
                         }
                     } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                        //获取附件.
                         NIOServerCnxn c = (NIOServerCnxn) k.attachment();
+                        //处理请求与发送流程
                         c.doIO(k);
                     } else {
                         if (LOG.isDebugEnabled()) {

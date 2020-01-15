@@ -274,11 +274,14 @@ public class ZooKeeperMain {
     }
 
     protected void connectToZK(String newHost) throws InterruptedException, IOException {
+        //当第一次连接的时候,zk为null。之后连接的时候会在这判断zk是否存活
         if (zk != null && zk.getState().isAlive()) {
             zk.close();
         }
         host = newHost;
+        //判断该链接是否是只读的
         boolean readOnly = cl.getOption("readonly") != null;
+        //new MyWatcher()在这里定义一个初始化解析
         zk = new ZooKeeper(host,
                  Integer.parseInt(cl.getOption("timeout")),
                  new MyWatcher(), readOnly);
@@ -287,13 +290,17 @@ public class ZooKeeperMain {
     public static void main(String args[])
         throws KeeperException, IOException, InterruptedException
     {
+        //客户端连接脚本会调用到这里 args先作为空使用默认配置。这里先当作单机来启动
         ZooKeeperMain main = new ZooKeeperMain(args);
+        //已经建立了连接
         main.run();
     }
 
     public ZooKeeperMain(String args[]) throws IOException, InterruptedException {
+        //解析命令行参数 比如设置 zk地址 -serve ip:port
         cl.parseOptions(args);
         System.out.println("Connecting to " + cl.getOption("server"));
+        //连接Zk
         connectToZK(cl.getOption("server"));
         //zk = new ZooKeeper(cl.getOption("server"),
 //                Integer.parseInt(cl.getOption("timeout")), new MyWatcher());
@@ -305,6 +312,7 @@ public class ZooKeeperMain {
 
     @SuppressWarnings("unchecked")
     void run() throws KeeperException, IOException, InterruptedException {
+        //这是zk使用jline来实现的命令行,就是在linux或者windows上启动客户端时的命令行工具
         if (cl.getCommand() == null) {
             System.out.println("Welcome to ZooKeeper!");
 
@@ -329,6 +337,7 @@ public class ZooKeeperMain {
                 String line;
                 Method readLine = consoleC.getMethod("readLine", String.class);
                 while ((line = (String)readLine.invoke(console, getPrompt())) != null) {
+                    //如果一切顺利,则会进入下面的逻辑
                     executeLine(line);
                 }
             } catch (ClassNotFoundException e) {

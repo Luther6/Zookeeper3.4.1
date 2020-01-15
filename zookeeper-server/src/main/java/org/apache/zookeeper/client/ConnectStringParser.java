@@ -41,7 +41,7 @@ public final class ConnectStringParser {
     private final ArrayList<InetSocketAddress> serverAddresses = new ArrayList<InetSocketAddress>();
 
     /**
-     * 
+     * 用来解析传入的地址参数,可以传递多个地址参数Zookeeper将会从中选择第一个可以使用的地址
      * @throws IllegalArgumentException
      *             for an invalid chroot path.
      */
@@ -73,6 +73,7 @@ public final class ConnectStringParser {
                 }
                 host = host.substring(0, pidx);
             }
+            //将传递的地址缓存到List中
             serverAddresses.add(InetSocketAddress.createUnresolved(host, port));
         }
     }

@@ -370,6 +370,7 @@ public class DataTree {
         int lastSlash = path.lastIndexOf('/');
         String parentName = path.substring(0, lastSlash);
         String childName = path.substring(lastSlash + 1);
+        //建立子节点信息
         StatPersisted stat = new StatPersisted();
         stat.setCtime(time);
         stat.setMtime(time);
@@ -392,14 +393,20 @@ public class DataTree {
             if (parentCVersion == -1) {
                 parentCVersion = parent.stat.getCversion();
                 parentCVersion++;
-            }    
+            }
+            //更新父节点相关信息
             parent.stat.setCversion(parentCVersion);
             parent.stat.setPzxid(zxid);
+            //鉴权
             Long longval = aclCache.convertAcls(acl);
+            //创建子节点
             DataNode child = new DataNode(parent, data, longval, stat);
+            //向父节点中添加子节点
             parent.addChild(childName);
+            //
             nodes.put(path, child);
             if (ephemeralOwner != 0) {
+                //如果是临时节点,那么另存备份,之后改变
                 HashSet<String> list = ephemerals.get(ephemeralOwner);
                 if (list == null) {
                     list = new HashSet<String>();
@@ -410,7 +417,7 @@ public class DataTree {
                 }
             }
         }
-        // now check if its one of the zookeeper node child
+        // now check if its one of the zookeeper node child  --
         if (parentName.startsWith(quotaZookeeper)) {
             // now check if its the limit node
             if (Quotas.limitNode.equals(childName)) {
@@ -423,13 +430,14 @@ public class DataTree {
                         .substring(quotaZookeeper.length()));
             }
         }
-        // also check to update the quotas for this node
+        // also check to update the quotas for this node --
         String lastPrefix;
         if((lastPrefix = getMaxPrefixWithQuota(path)) != null) {
             // ok we have some match and need to update
             updateCount(lastPrefix, 1);
             updateBytes(lastPrefix, data == null ? 0 : data.length);
         }
+        // --
         dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
         childWatches.triggerWatch(parentName.equals("") ? "/" : parentName,
                 Event.EventType.NodeChildrenChanged);
@@ -712,6 +720,7 @@ public class DataTree {
                 case OpCode.create:
                     CreateTxn createTxn = (CreateTxn) txn;
                     rc.path = createTxn.getPath();
+                    //创建子节点并挂载到父节点上
                     createNode(
                             createTxn.getPath(),
                             createTxn.getData(),
@@ -837,6 +846,7 @@ public class DataTree {
          * with the file.
          */
         if (rc.zxid > lastProcessedZxid) {
+            //更新最后一次处理的ZXID
         	lastProcessedZxid = rc.zxid;
         }
 
@@ -852,7 +862,7 @@ public class DataTree {
          * before its children.
          *
          * Note, such failures on DT should be seen only during
-         * restore.
+         * restore.  处理错误
          */
         if (header.getType() == OpCode.create &&
                 rc.err == Code.NODEEXISTS.intValue()) {

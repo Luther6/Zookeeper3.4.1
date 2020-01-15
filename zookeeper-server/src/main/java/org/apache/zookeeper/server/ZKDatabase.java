@@ -81,8 +81,11 @@ public class ZKDatabase {
      * @param snapLog the FileTxnSnapLog mapping this zkdatabase
      */
     public ZKDatabase(FileTxnSnapLog snapLog) {
+        //初始化存储结构树,并zk中默认的几个节点 容器为ConcurrentHashMap 键为节点名称 值为每条数据形成的DataNode对象
         dataTree = new DataTree();
+
         sessionsWithTimeouts = new ConcurrentHashMap<Long, Integer>();
+        //设置日志快照
         this.snapLog = snapLog;
     }
     

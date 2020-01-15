@@ -401,31 +401,45 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     throws IOException, InterruptedException {
         //check to see if zkDb is not null
         if (zkDb == null) {
+            //初始化Zk内存数据库
             zkDb = new ZKDatabase(this.txnLogFactory);
         }  
         if (!zkDb.isInitialized()) {
+            //装载本地持久化文件中的数据 之后详细分析
             loadData();
         }
     }
     
     public synchronized void startup() {
         if (sessionTracker == null) {
+            //初始化会话跟踪器并装载本地会话
             createSessionTracker();
         }
+        //启动会话处理器
         startSessionTracker();
+        //启动单机模式下Request 处理器链
         setupRequestProcessors();
-
+        //注册JMX
         registerJMX();
-
+        //设置服务端状态
         setState(State.RUNNING);
+        //-
         notifyAll();
     }
 
     protected void setupRequestProcessors() {
+        /**
+         * Zk中单机模式处理请求主要是使用这三个处理器来进行处理
+         * 三个处理器形成一条链来链式处理请求顺序为PrepRequestProcessor->SyncRequestProcessor->FinalRequestProcessor
+         * 前两个处理器都会存储自己的下一个处理器是谁来实现链式调用。并且FinalRequestProcessor 并没有实现为线程
+         *
+         * 简单总结:
+         */
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor syncProcessor = new SyncRequestProcessor(this,
                 finalProcessor);
         ((SyncRequestProcessor)syncProcessor).start();
+        //相同
         firstProcessor = new PrepRequestProcessor(this, syncProcessor);
         ((PrepRequestProcessor)firstProcessor).start();
     }
@@ -746,8 +760,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         try {
             touch(si.cnxn);
+
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
+                //添加到队列由firstProcessor 线程处理
                 firstProcessor.processRequest(si);
                 if (si.cnxn != null) {
                     incInProcess();
@@ -960,7 +976,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     public void processPacket(ServerCnxn cnxn, ByteBuffer incomingBuffer) throws IOException {
-        // We have the request, now process and setup for next
+        // We have the request, now process and setup for next,Socket流中的数据进行反序列化
         InputStream bais = new ByteBufferInputStream(incomingBuffer);
         BinaryInputArchive bia = BinaryInputArchive.getArchive(bais);
         RequestHeader h = new RequestHeader();
@@ -1005,8 +1021,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                               + scheme);
                 }
                 LOG.info("auth success " + cnxn.getRemoteSocketAddress());
+                //构造回应头
                 ReplyHeader rh = new ReplyHeader(h.getXid(), 0,
                         KeeperException.Code.OK.intValue());
+                //
                 cnxn.sendResponse(rh, null, null);
             }
             return;
@@ -1018,9 +1036,11 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 return;
             }
             else {
+                //根据请求信息构建具体请求对象
                 Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(),
                   h.getType(), incomingBuffer, cnxn.getAuthInfo());
                 si.setOwner(ServerCnxn.me);
+                //发送处理请求信息
                 submitRequest(si);
             }
         }
@@ -1073,7 +1093,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         ProcessTxnResult rc;
         int opCode = hdr.getType();
         long sessionId = hdr.getClientId();
+        //处理节点等方法
         rc = getZKDatabase().processTxn(hdr, txn);
+        //处理session 之后看
         if (opCode == OpCode.createSession) {
             if (txn instanceof CreateSessionTxn) {
                 CreateSessionTxn cst = (CreateSessionTxn) txn;

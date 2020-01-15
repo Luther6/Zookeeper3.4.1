@@ -50,6 +50,7 @@ public class ZooKeeperServerMain {
      * @param args the configfile or the port datadir [ticktime]
      */
     public static void main(String[] args) {
+        //实例化一个用于启动与运行单机模式的实例对象
         ZooKeeperServerMain main = new ZooKeeperServerMain();
         try {
             main.initializeAndRun(args);
@@ -74,6 +75,7 @@ public class ZooKeeperServerMain {
         throws ConfigException, IOException
     {
         try {
+            //注册日志所需要的类
             ManagedUtil.registerLog4jMBeans();
         } catch (JMException e) {
             LOG.warn("Unable to register log4j JMX control", e);
@@ -81,11 +83,12 @@ public class ZooKeeperServerMain {
 
         ServerConfig config = new ServerConfig();
         if (args.length == 1) {
+            //解析配置文件
             config.parse(args[0]);
         } else {
             config.parse(args);
         }
-
+        //根据配置文件启动服务端
         runFromConfig(config);
     }
 
@@ -102,23 +105,30 @@ public class ZooKeeperServerMain {
             // so rather than spawning another thread, we will just call
             // run() in this thread.
             // create a file logger url from the command line args
-            final ZooKeeperServer zkServer = new ZooKeeperServer();
+            //实例化处理单机模式下的请求
+                final ZooKeeperServer zkServer = new ZooKeeperServer();
             // Registers shutdown handler which will be used to know the
             // server error or shutdown state changes.
+            //zk 在这里使用CountDownLatch来使线程等待
             final CountDownLatch shutdownLatch = new CountDownLatch(1);
+            //注册 zk服务端关闭的处理控制器  使用CountdownLatch
             zkServer.registerServerShutdownHandler(
                     new ZooKeeperServerShutdownHandler(shutdownLatch));
-
+            //实例化关于dataLogDir与dataDir的文件对象的包装对象
             txnLog = new FileTxnSnapLog(new File(config.dataLogDir), new File(
                     config.dataDir));
             txnLog.setServerStats(zkServer.serverStats());
             zkServer.setTxnLogFactory(txnLog);
+            // 设置session过期时间与单机接受的连接限制等相关配置
             zkServer.setTickTime(config.tickTime);
             zkServer.setMinSessionTimeout(config.minSessionTimeout);
             zkServer.setMaxSessionTimeout(config.maxSessionTimeout);
+            //创建一个ServerCnxn的工程对象与 ClientCnxn对应。默认为NIOServerCnxnFactory 反射
             cnxnFactory = ServerCnxnFactory.createFactory();
+            //配置必要参数 本地地址与本地最大连接数 && 开启Socket等信息
             cnxnFactory.configure(config.getClientPortAddress(),
                     config.getMaxClientCnxns());
+            //启动服务处理程序
             cnxnFactory.startup(zkServer);
             // Watch status of ZooKeeper server. It will do a graceful shutdown
             // if the server is not running or hits an internal error.

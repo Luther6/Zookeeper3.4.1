@@ -443,14 +443,17 @@ public class ZooKeeper {
                 + " sessionTimeout=" + sessionTimeout + " watcher=" + watcher);
 
         watchManager.defaultWatcher = watcher;
-
+        //地址解析
         ConnectStringParser connectStringParser = new ConnectStringParser(
                 connectString);
+        //对地址进行封装
         HostProvider hostProvider = new StaticHostProvider(
                 connectStringParser.getServerAddresses());
+        //getClientCnxnSocket()获取 SocketNIO实例 ZKWatchManager 为zk中事件的管理器
         cnxn = new ClientCnxn(connectStringParser.getChrootPath(),
                 hostProvider, sessionTimeout, this, watchManager,
                 getClientCnxnSocket(), canBeReadOnly);
+        //启动刚刚实例化的线程
         cnxn.start();
     }
 
@@ -772,21 +775,39 @@ public class ZooKeeper {
         throws KeeperException, InterruptedException
     {
         final String clientPath = path;
+        /**
+         * 对创建的节点名称进行校验,校验规则
+         * 1、首先判断是否是顺序节点,如果是顺序节点先在后面加上1
+         * 2、判断是否为空
+         * 3、判断是否以/ 开头
+         * 4、判断是否存在  ../  类的路径操作
+         * 5、判断ACL如果开启ACL的话,ACL 列表不为0
+         * 6、不能存在特殊字符 如空格等
+         * 7、不能存在//luther 两个或多个/ 开头的名字
+         *
+         */
         PathUtils.validatePath(clientPath, createMode.isSequential());
-
+        //不懂
         final String serverPath = prependChroot(clientPath);
-
+        //新建请求头
         RequestHeader h = new RequestHeader();
+        //设置此次请求的类型
         h.setType(ZooDefs.OpCode.create);
+
         CreateRequest request = new CreateRequest();
         CreateResponse response = new CreateResponse();
+        //设置创建节点的内容
         request.setData(data);
+        //设置创建节点的类型  永久  临时等
         request.setFlags(createMode.toFlag());
+        //设置创建的节点名称
         request.setPath(serverPath);
+        //暂无
         if (acl != null && acl.size() == 0) {
             throw new KeeperException.InvalidACLException();
         }
         request.setAcl(acl);
+        //发送请求
         ReplyHeader r = cnxn.submitRequest(h, request, response, null);
         if (r.getErr() != 0) {
             throw KeeperException.create(KeeperException.Code.get(r.getErr()),
@@ -1839,12 +1860,16 @@ public class ZooKeeper {
     }
 
     private static ClientCnxnSocket getClientCnxnSocket() throws IOException {
+        //获取zookeeper.clientCnxnSocket系统属性,判断是否有指定的SocketNIO的实现
+        //可以通过改属性来使用自己定义的SocketNIO
         String clientCnxnSocketName = System
                 .getProperty(ZOOKEEPER_CLIENT_CNXN_SOCKET);
+        //如果没有指定默认的则使用系统默认的ClientCnxnSocketNIO
         if (clientCnxnSocketName == null) {
             clientCnxnSocketName = ClientCnxnSocketNIO.class.getName();
         }
         try {
+            //反射实例化
             return (ClientCnxnSocket) Class.forName(clientCnxnSocketName).getDeclaredConstructor()
                     .newInstance();
         } catch (Exception e) {

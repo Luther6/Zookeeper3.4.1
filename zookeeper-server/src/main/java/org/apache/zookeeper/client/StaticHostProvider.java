@@ -99,8 +99,9 @@ public final class StaticHostProvider implements HostProvider {
             throw new IllegalArgumentException(
                     "A HostProvider may not be empty!");
         }
-
+        //再做了一次缓存?
         this.serverAddresses.addAll(serverAddresses);
+        //打乱存储顺序
         Collections.shuffle(this.serverAddresses);
     }
 
@@ -146,6 +147,7 @@ public final class StaticHostProvider implements HostProvider {
     }
 
     public InetSocketAddress next(long spinDelay) {
+        //如果有多个地址的话,那么会循环取地址值来尝试连接
         currentIndex = ++currentIndex % serverAddresses.size();
         if (currentIndex == lastIndex && spinDelay > 0) {
             try {
@@ -161,10 +163,12 @@ public final class StaticHostProvider implements HostProvider {
         InetSocketAddress curAddr = serverAddresses.get(currentIndex);
         try {
             String curHostString = getHostString(curAddr);
+            //这里会生成IPV6与IPV4的地址
             List<InetAddress> resolvedAddresses = new ArrayList<InetAddress>(Arrays.asList(this.resolver.getAllByName(curHostString)));
             if (resolvedAddresses.isEmpty()) {
                 return curAddr;
             }
+            //打乱顺序随机取
             Collections.shuffle(resolvedAddresses);
             return new InetSocketAddress(resolvedAddresses.get(0), curAddr.getPort());
         } catch (UnknownHostException e) {

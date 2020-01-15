@@ -64,7 +64,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
-        if (sockKey.isReadable()) {
+        if (sockKey.isReadable()) { //判断是否读就绪  用于处理服务端响应的信息 ping 等
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
                 throw new EndOfStreamException(
@@ -72,6 +72,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                                 + Long.toHexString(sessionId)
                                 + ", likely server has closed socket");
             }
+            //用来处理连接响应
             if (!incomingBuffer.hasRemaining()) {
                 incomingBuffer.flip();
                 if (incomingBuffer == lenBuffer) {
@@ -91,6 +92,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     updateLastHeard();
                     initialized = true;
                 } else {
+                    //用来处理常用响应
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
@@ -98,31 +100,40 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
             }
         }
-        if (sockKey.isWritable()) {
+        if (sockKey.isWritable()) { //判断是否写就绪
             synchronized(outgoingQueue) {
+                //从outgoingQueue中取出一个请求
                 Packet p = findSendablePacket(outgoingQueue,
                         cnxn.sendThread.clientTunneledAuthenticationInProgress());
 
                 if (p != null) {
+                    //更新时间
                     updateLastSend();
-                    // If we already started writing p, p.bb will already exist
+                    // If we already started writing p, p.bb will already exist bb是ByteBuff就是我们要向服务端发送的请求的主题内容
                     if (p.bb == null) {
                         if ((p.requestHeader != null) &&
                                 (p.requestHeader.getType() != OpCode.ping) &&
                                 (p.requestHeader.getType() != OpCode.auth)) {
+                            //设置Xid,因为在之前如果不是ping 或者 auth类的请求 都不会设置xid
                             p.requestHeader.setXid(cnxn.getXid());
                         }
+                        //对请求的主体内容对象进行序列化
                         p.createBB();
                     }
+                    //写入到SocketChannel中,这就算把请求发送过去了
                     sock.write(p.bb);
+                    //如果全部信息全部发送完毕了
                     if (!p.bb.hasRemaining()) {
                         sentCount++;
+                        //把发送的请求移除掉
                         outgoingQueue.removeFirstOccurrence(p);
                         if (p.requestHeader != null
                                 && p.requestHeader.getType() != OpCode.ping
                                 && p.requestHeader.getType() != OpCode.auth) {
                             synchronized (pendingQueue) {
+                                //如果不是ping auth 请求则缓存到pendingQueue中
                                 pendingQueue.add(p);
+                                // ok 到服务端接受的地方分析
                             }
                         }
                     }
@@ -146,7 +157,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     // http://docs.oracle.com/javase/6/docs/technotes/guides/net/articles/connection_release.html
                     disableWrite();
                 } else {
-                    // Just in case
+                    // Just in case  再次开启write
                     enableWrite();
                 }
             }
@@ -159,6 +170,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             if (outgoingQueue.isEmpty()) {
                 return null;
             }
+            //clientTunneledAuthenticationInProgress  不懂 之后看
             if (outgoingQueue.getFirst().bb != null // If we've already starting sending the first packet, we better finish
                 || !clientTunneledAuthenticationInProgress) {
                 return outgoingQueue.getFirst();
@@ -259,8 +271,10 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     SocketChannel createSock() throws IOException {
         SocketChannel sock;
         sock = SocketChannel.open();
+        //设置为非阻塞的
         sock.configureBlocking(false);
         sock.socket().setSoLinger(false, -1);
+        //开启TCP_NODELAY
         sock.socket().setTcpNoDelay(true);
         return sock;
     }
@@ -273,8 +287,11 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
      */
     void registerAndConnect(SocketChannel sock, InetSocketAddress addr) 
     throws IOException {
+        //使用给定的选择器注册此通道，返回一个选择项键  NIO的知识
         sockKey = sock.register(selector, SelectionKey.OP_CONNECT);
+        //如果是NIO并且设置了非阻塞的话,不一定会立马返回成功连接
         boolean immediateConnect = sock.connect(addr);
+        //如果立马返回则立即进行初期连接初始化
         if (immediateConnect) {
             sendThread.primeConnection();
         }
@@ -282,8 +299,10 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     
     @Override
     void connect(InetSocketAddress addr) throws IOException {
+        //创建一个非阻塞的Socket通道
         SocketChannel sock = createSock();
         try {
+            //组测并且第一次尝试连接
            registerAndConnect(sock, addr);
         } catch (IOException e) {
             LOG.error("Unable to open socket to " + addr);
@@ -349,6 +368,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
+            //返回此选择器的选择键集。
             selected = selector.selectedKeys();
         }
         // Everything below and until we get back to the select is
@@ -356,13 +376,18 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         // Why we just have to do this once, here
         updateNow();
         for (SelectionKey k : selected) {
+            //获取  该选择器对于的channel
             SocketChannel sc = ((SocketChannel) k.channel());
+            //判断当前的chanel的状态是连接中,还是已经连接了
             if ((k.readyOps() & SelectionKey.OP_CONNECT) != 0) {
                 if (sc.finishConnect()) {
                     updateLastSendAndHeard();
+                    //进行必要的线程初始化
                     sendThread.primeConnection();
+                    //回到ZookeeperMain的main类
                 }
             } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                //上面的判断NIO的知识.
                 doIO(pendingQueue, outgoingQueue, cnxn);
             }
         }

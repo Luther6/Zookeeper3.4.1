@@ -76,6 +76,7 @@ public class QuorumPeerMain {
      * @param args path to the configfile
      */
     public static void main(String[] args) {
+        //服务端启动会调用该方法
         QuorumPeerMain main = new QuorumPeerMain();
         try {
             main.initializeAndRun(args);
@@ -101,21 +102,22 @@ public class QuorumPeerMain {
     {
         QuorumPeerConfig config = new QuorumPeerConfig();
         if (args.length == 1) {
+            //解析配置文件
             config.parse(args[0]);
         }
 
-        // Start and schedule the the purge task
+        // Start and schedule the the purge task  先不看  这里是定期清理的操作 默认没有配置
         DatadirCleanupManager purgeMgr = new DatadirCleanupManager(config
                 .getDataDir(), config.getDataLogDir(), config
                 .getSnapRetainCount(), config.getPurgeInterval());
         purgeMgr.start();
-
+        //根据配置文件来判断是启动单机模式还是启动集群模式.
         if (args.length == 1 && config.servers.size() > 0) {
             runFromConfig(config);
         } else {
             LOG.warn("Either no config or no quorum defined in config, running "
                     + " in standalone mode");
-            // there is only server in the quorum -- run as standalone
+            // there is only server in the quorum -- run as standalone 单机模式
             ZooKeeperServerMain.main(args);
         }
     }
