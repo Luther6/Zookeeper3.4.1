@@ -123,7 +123,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             }
             // do not add non quorum packets to the queue.
             if (Request.isQuorum(request.type)) {
-                zks.getZKDatabase().addCommittedProposal(request);
+                zks.getZKDatabase().addCommittedProposal(request); //在集群模式下将会创建热数据存储
             }
         }
         //closeSession 相关处理 --

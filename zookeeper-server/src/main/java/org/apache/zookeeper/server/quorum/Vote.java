@@ -42,9 +42,9 @@ public class Vote {
         this.version = 0x0;
         this.id = id;
         this.zxid = zxid;
-        this.electionEpoch = -1;
+        this.electionEpoch = -1; //本次自启动来参与选举的界数
         this.peerEpoch = peerEpoch;
-        this.state = ServerState.LOOKING;
+        this.state = ServerState.LOOKING; //设置当前的状态为looking表示正在进行领导者选举
     }
 
     public Vote(long id, 

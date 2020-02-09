@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.security.sasl.SaslException;
@@ -197,11 +198,11 @@ public class Leader {
             if (self.getQuorumListenOnAllIPs()) {
                 ss = new ServerSocket(self.getQuorumAddress().getPort());
             } else {
-                ss = new ServerSocket();
+                ss = new ServerSocket(); //生成ss 为了进行数据同步了socket
             }
             ss.setReuseAddress(true);
             if (!self.getQuorumListenOnAllIPs()) {
-                ss.bind(self.getQuorumAddress());
+                ss.bind(self.getQuorumAddress()); //用投票地址来处理进行领导者选举后新的leaner的连接请求
             }
         } catch (BindException e) {
             if (self.getQuorumListenOnAllIPs()) {
@@ -211,7 +212,7 @@ public class Leader {
             }
             throw e;
         }
-        this.zk=zk;
+        this.zk=zk; //会为每一种类型的zookeeper生成一种处理请求的zkServer!
     }
 
     /**
@@ -325,15 +326,15 @@ public class Leader {
             try {
                 while (!stop) {
                     try{
-                        Socket s = ss.accept();
+                        Socket s = ss.accept(); //阻塞方法 每次连接过来 都会创建新的连接  端口为投票端口
                         // start with the initLimit, once the ack is processed
                         // in LearnerHandler switch to the syncLimit
                         s.setSoTimeout(self.tickTime * self.initLimit);
-                        s.setTcpNoDelay(nodelay);
+                        s.setTcpNoDelay(nodelay); //TCP设置
 
                         BufferedInputStream is = new BufferedInputStream(
-                                s.getInputStream());
-                        LearnerHandler fh = new LearnerHandler(s, is, Leader.this);
+                                s.getInputStream()); //获取输入流
+                        LearnerHandler fh = new LearnerHandler(s, is, Leader.this);//为每一个新的leaner建立一个新的处理线程
                         fh.start();
                     } catch (SocketException e) {
                         if (stop) {
@@ -385,9 +386,9 @@ public class Leader {
 
         try {
             self.tick.set(0);
-            zk.loadData();
+            zk.loadData(); //再次加载 。前面已经加载过了??
             
-            leaderStateSummary = new StateSummary(self.getCurrentEpoch(), zk.getLastProcessedZxid());
+            leaderStateSummary = new StateSummary(self.getCurrentEpoch(), zk.getLastProcessedZxid()); //对leader的领导属性进行包装
 
             // Start thread that waits for connection requests from 
             // new followers.
@@ -395,16 +396,16 @@ public class Leader {
             cnxAcceptor.start();
             
             readyToStart = true;
-            long epoch = getEpochToPropose(self.getId(), self.getAcceptedEpoch());
+            long epoch = getEpochToPropose(self.getId(), self.getAcceptedEpoch());//获取统一epoch wait住
             
-            zk.setZxid(ZxidUtils.makeZxid(epoch, 0));
+            zk.setZxid(ZxidUtils.makeZxid(epoch, 0));//更新zxid
             
             synchronized(this){
-                lastProposed = zk.getZxid();
+                lastProposed = zk.getZxid();//更新
             }
             
             newLeaderProposal.packet = new QuorumPacket(NEWLEADER, zk.getZxid(),
-                    null, null);
+                    null, null);//快照中最新的Zxid的记录
 
 
             if ((newLeaderProposal.packet.getZxid() & 0xffffffffL) != 0) {
@@ -412,14 +413,14 @@ public class Leader {
                         + Long.toHexString(newLeaderProposal.packet.getZxid()));
             }
             
-            waitForEpochAck(self.getId(), leaderStateSummary);
-            self.setCurrentEpoch(epoch);
+            waitForEpochAck(self.getId(), leaderStateSummary);//等待follower的过半应答
+            self.setCurrentEpoch(epoch);//更新当前的epoch
 
             // We have to get at least a majority of servers in sync with
             // us. We do this by waiting for the NEWLEADER packet to get
             // acknowledged
             try {
-                waitForNewLeaderAck(self.getId(), zk.getZxid());
+                waitForNewLeaderAck(self.getId(), zk.getZxid());//等待NEWLEADER后的过半应答
             } catch (InterruptedException e) {
                 shutdown("Waiting for a quorum of followers, only synced with sids: [ "
                         + getSidSetString(newLeaderProposal.ackSet) + " ]");
@@ -436,7 +437,7 @@ public class Leader {
                 return;
             }
             
-            startZkServer();
+            startZkServer();//到这里follower已经更新完自己的epoch与快照文件开始启动zkServer
             
             /**
              * WARNING: do not use this for anything other than QA testing
@@ -470,8 +471,9 @@ public class Leader {
             // iteration
             boolean tickSkip = true;
     
-            while (true) {
-                Thread.sleep(self.tickTime / 2);
+            while (true) { //下面是用来维护集群,假如我们发送心跳包,无法通过过半检查的话,那么说明当前集群已经失效需要进行再次选举
+//                Thread.sleep(self.tickTime / 2);
+                TimeUnit.SECONDS.sleep(10);
                 if (!tickSkip) {
                     self.tick.incrementAndGet();
                 }
@@ -499,7 +501,7 @@ public class Leader {
                 //if (!tickSkip && syncedCount < self.quorumPeers.size() / 2) {
                     // Lost quorum, shutdown
                     shutdown("Not sufficient followers synced, only synced with sids: [ "
-                            + getSidSetString(syncedSet) + " ]");
+                            + getSidSetString(syncedSet) + " ]"); //停止集群正常运行,进入再次领导者选举
                     // make sure the order is the same!
                     // the leader goes to looking
                     return;
@@ -581,7 +583,7 @@ public class Leader {
              */
             return;
         }
-    
+        //下面就是处理UPTODATE 以外的响应  leader给follower发送响应后 会把请求缓存到outstandingProposals
         if (outstandingProposals.size() == 0) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("outstanding is 0");
@@ -608,23 +610,23 @@ public class Leader {
             LOG.debug("Count for zxid: 0x{} is {}",
                     Long.toHexString(zxid), p.ackSet.size());
         }
-        if (self.getQuorumVerifier().containsQuorum(p.ackSet)){             
+        if (self.getQuorumVerifier().containsQuorum(p.ackSet)){   //校验过半(有一半的follower成功缓存了该数据)
             if (zxid != lastCommitted+1) {
                 LOG.warn("Commiting zxid 0x{} from {} not first!",
                         Long.toHexString(zxid), followerAddr);
                 LOG.warn("First is 0x{}", Long.toHexString(lastCommitted + 1));
             }
-            outstandingProposals.remove(zxid);
+            outstandingProposals.remove(zxid);//移除
             if (p.request != null) {
-                toBeApplied.add(p);
+                toBeApplied.add(p);//关于状态的一些处理
             }
 
             if (p.request == null) {
                 LOG.warn("Going to commmit null request for proposal: {}", p);
             }
-            commit(zxid);
-            inform(p);
-            zk.commitProcessor.commit(p.request);
+            commit(zxid);//完成过半后向follower发送commit表示此次操作成功  p2c
+            inform(p);//直接给observer让他添加数据 (Observer并不参加投票)
+            zk.commitProcessor.commit(p.request);//唤醒线程并执行挂载线程
             if(pendingSyncs.containsKey(zxid)){
                 for(LearnerSyncRequest r: pendingSyncs.remove(zxid)) {
                     sendSync(r);
@@ -774,7 +776,7 @@ public class Leader {
         }
         byte[] data = SerializeUtils.serializeRequest(request);
         proposalStats.setLastProposalSize(data.length);
-        QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
+        QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);//包装请求
         
         Proposal p = new Proposal();
         p.packet = pp;
@@ -858,7 +860,7 @@ public class Leader {
             }
         }
         if (handler.getLearnerType() == LearnerType.PARTICIPANT) {
-            addForwardingFollower(handler);
+            addForwardingFollower(handler); //添加leanerHanlder
         } else {
             addObserverLearnerHandler(handler);
         }
@@ -869,27 +871,27 @@ public class Leader {
     protected Set<Long> connectingFollowers = new HashSet<Long>();
     public long getEpochToPropose(long sid, long lastAcceptedEpoch) throws InterruptedException, IOException {
         synchronized(connectingFollowers) {
-            if (!waitingForNewEpoch) {
+            if (!waitingForNewEpoch) { // 下次获取时不必进行校验
                 return epoch;
             }
-            if (lastAcceptedEpoch >= epoch) {
+            if (lastAcceptedEpoch >= epoch) { //如果leaner的epoch大于当前leader的epoch的话,那么更新当前leader的epoch
                 epoch = lastAcceptedEpoch+1;
             }
             if (isParticipant(sid)) {
-                connectingFollowers.add(sid);
+                connectingFollowers.add(sid); //判断是否为follower类型,并加入到缓存中
             }
             QuorumVerifier verifier = self.getQuorumVerifier();
             if (connectingFollowers.contains(self.getId()) && 
-                                            verifier.containsQuorum(connectingFollowers)) {
-                waitingForNewEpoch = false;
-                self.setAcceptedEpoch(epoch);
-                connectingFollowers.notifyAll();
+                                            verifier.containsQuorum(connectingFollowers)) { //判断epoch是否通过过半机制
+                waitingForNewEpoch = false;//设置异常状况为false,下次获取直接返回
+                self.setAcceptedEpoch(epoch);//统一epoch
+                connectingFollowers.notifyAll();//唤醒下面的线程  我们为每一个zookeeper创建了一个线程
             } else {
                 long start = Time.currentElapsedTime();
                 long cur = start;
                 long end = start + self.getInitLimit()*self.getTickTime();
                 while(waitingForNewEpoch && cur < end) {
-                    connectingFollowers.wait(end - cur);
+                    connectingFollowers.wait(end - cur); //如果没有通过的话那么就会在这里wait 一次心跳与初始化时间，如果还没有通过过半则保持
                     cur = Time.currentElapsedTime();
                 }
                 if (waitingForNewEpoch) {
@@ -982,7 +984,7 @@ public class Leader {
      * Process NEWLEADER ack of a given sid and wait until the leader receives
      * sufficient acks.
      *
-     * @param sid
+     * @param sid follower
      * @throws InterruptedException
      */
     public void waitForNewLeaderAck(long sid, long zxid)
@@ -995,7 +997,7 @@ public class Leader {
             }
 
             long currentZxid = newLeaderProposal.packet.getZxid();
-            if (zxid != currentZxid) {
+            if (zxid != currentZxid) { //校验快照是否相同
                 LOG.error("NEWLEADER ACK from sid: " + sid
                         + " is from a different epoch - current 0x"
                         + Long.toHexString(currentZxid) + " receieved 0x"
@@ -1003,11 +1005,11 @@ public class Leader {
                 return;
             }
 
-            if (isParticipant(sid)) {
+            if (isParticipant(sid)) { //判断是否是Participant
                 newLeaderProposal.ackSet.add(sid);
             }
 
-            if (self.getQuorumVerifier().containsQuorum(
+            if (self.getQuorumVerifier().containsQuorum( //过半校验,保持集群中至少一半以上的机器同步
                     newLeaderProposal.ackSet)) {
                 quorumFormed = true;
                 newLeaderProposal.ackSet.notifyAll();
@@ -1016,7 +1018,7 @@ public class Leader {
                 long cur = start;
                 long end = start + self.getInitLimit() * self.getTickTime();
                 while (!quorumFormed && cur < end) {
-                    newLeaderProposal.ackSet.wait(end - cur);
+                    newLeaderProposal.ackSet.wait(end - cur);//等待过半通过
                     cur = Time.currentElapsedTime();
                 }
                 if (!quorumFormed) {

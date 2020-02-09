@@ -120,7 +120,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
     public void run() {
         try {
             while (true) {
-                //获取请求对象包
+                //获取请求对象包 阻塞
                 Request request = submittedRequests.take();
                 long traceMask = ZooTrace.CLIENT_REQUEST_TRACE_MASK;
                 if (request.type == OpCode.ping) {
@@ -149,9 +149,9 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
     ChangeRecord getRecordForPath(String path) throws KeeperException.NoNodeException {
         ChangeRecord lastChange = null;
         synchronized (zks.outstandingChanges) {
-            lastChange = zks.outstandingChangesForPath.get(path);
+            lastChange = zks.outstandingChangesForPath.get(path); //先判断之前是否已经有请求发送过来创建相同的节点了
             if (lastChange == null) {
-                DataNode n = zks.getZKDatabase().getNode(path);
+                DataNode n = zks.getZKDatabase().getNode(path); //再从树中查找是否存在该节点
                 if (n != null) {
                     Set<String> children;
                     synchronized(n) {
@@ -163,7 +163,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             }
         }
         if (lastChange == null || lastChange.stat == null) {
-            throw new KeeperException.NoNodeException(path);
+            throw new KeeperException.NoNodeException(path); //代表该节点不存在是合法的,会抛出异常
         }
         return lastChange;
     }
@@ -356,7 +356,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 int parentCVersion = parentRecord.stat.getCversion();
                 CreateMode createMode =
                     CreateMode.fromFlag(createRequest.getFlags());
-                //判断是否是序列化然后处理  之后看
+                //判断是否是顺序节点然后处理  之后看
                 if (createMode.isSequential()) {
                     path = path + String.format(Locale.ENGLISH, "%010d", parentCVersion);
                 }
@@ -366,7 +366,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                     if (getRecordForPath(path) != null) {
                         throw new KeeperException.NodeExistsException(path);
                     }
-                } catch (KeeperException.NoNodeException e) {
+                } catch (KeeperException.NoNodeException e) { //合法
                     // 为了复用代码
                     // ignore this one
                 }
@@ -383,7 +383,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                         listACL,
                         createMode.isEphemeral(), newCversion);
                 StatPersisted s = new StatPersisted();
-                //之后看
+                //之后看 判断临时节点
                 if (createMode.isEphemeral()) {
                     s.setEphemeralOwner(request.sessionId);
                 }
@@ -462,7 +462,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 }
                 nodeRecord = getRecordForPath(path);
                 checkACL(zks, nodeRecord.acl, ZooDefs.Perms.ADMIN,
-                        request.authInfo);
+                    request.authInfo);
                 version = setAclRequest.getVersion();
                 currentVersion = nodeRecord.stat.getAversion();
                 if (version != -1 && version != currentVersion) {
@@ -701,7 +701,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             }
         }
         request.zxid = zks.getZxid();
-        nextProcessor.processRequest(request);
+        nextProcessor.processRequest(request); //下一个处理器进行处理
     }
 
     private List<ACL> removeDuplicates(List<ACL> acl) {

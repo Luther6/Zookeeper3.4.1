@@ -396,7 +396,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     private void readRequest() throws IOException {
-        zkServer.processPacket(this, incomingBuffer);
+        zkServer.processPacket(this, incomingBuffer); //处理客户端请求,如果是集群模式下的话则分不同的zkServer
     }
     
     protected void incrOutstandingRequests(RequestHeader h) {

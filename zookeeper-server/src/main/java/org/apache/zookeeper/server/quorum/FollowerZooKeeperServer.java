@@ -92,9 +92,9 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
         request.txn = txn;
         request.zxid = hdr.getZxid();
         if ((request.zxid & 0xffffffffL) != 0) {
-            pendingTxns.add(request);
+            pendingTxns.add(request);//添加到pendingTxns 等待
         }
-        syncProcessor.processRequest(request);
+        syncProcessor.processRequest(request);//follower直接把leader数据请求写入
     }
 
     /**
@@ -102,6 +102,7 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
      * which matches up the zxid from the COMMIT with (hopefully) the head of
      * the pendingTxns queue and hands it to the commitProcessor to commit.
      * @param zxid - must correspond to the head of pendingTxns if it exists
+     *             同步热数据与follower同步leader数据
      */
     public void commit(long zxid) {
         if (pendingTxns.size() == 0) {
@@ -117,7 +118,7 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
             System.exit(12);
         }
         Request request = pendingTxns.remove();
-        commitProcessor.commit(request);
+        commitProcessor.commit(request);//这里的request是leader上节点的事务文件通过PROPOSAL传递过来 可以直接在内存中创建出该节点
     }
     
     synchronized public void sync(){

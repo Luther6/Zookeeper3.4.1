@@ -195,6 +195,7 @@ public class QuorumPeerConfig {
             } else if (key.equals("quorumListenOnAllIPs")) {
                 quorumListenOnAllIPs = Boolean.parseBoolean(value);
             } else if (key.equals("peerType")) {
+                //首先根据是否配置了peerType来预先确定zookeeper的身份
                 if (value.toLowerCase().equals("observer")) {
                     peerType = LearnerType.OBSERVER;
                 } else if (value.toLowerCase().equals("participant")) {
@@ -210,6 +211,9 @@ public class QuorumPeerConfig {
             } else if (key.equals("autopurge.purgeInterval")) {
                 purgeInterval = Integer.parseInt(value);
             } else if (key.startsWith("server.")) {
+                /**
+                 * 即使没有配置peerType这里也会根据Server配置的端口后添加 observer来确定客户端是否是Observer类型
+                 */
                 int dot = key.indexOf('.');
                 long sid = Long.parseLong(key.substring(dot + 1));
                 String parts[] = splitWithLeadingHostname(value);
@@ -220,7 +224,7 @@ public class QuorumPeerConfig {
                 }
                 LearnerType type = null;
                 String hostname = parts[0];
-                Integer port = Integer.parseInt(parts[1]);
+                Integer port = Integer.parseInt(parts[1]);//解析出集群中数据同步的端口号
                 Integer electionPort = null;
                 if (parts.length > 2){
                 	electionPort=Integer.parseInt(parts[2]);
@@ -396,14 +400,14 @@ public class QuorumPeerConfig {
                  */
 
                 LOG.info("Defaulting to majority quorums");
-                quorumVerifier = new QuorumMaj(servers.size());
+                quorumVerifier = new QuorumMaj(servers.size()); //设置过半
             }
 
             // Now add observers to servers, once the quorums have been
             // figured out
-            servers.putAll(observers);
+            servers.putAll(observers); //在设置完过半阀值后任然把OBSERVER类型的zookeeper放进来
 
-            File myIdFile = new File(dataDir, "myid");
+            File myIdFile = new File(dataDir, "myid"); //读取myid文件确定该zookeeper的身份标识
             if (!myIdFile.exists()) {
                 throw new IllegalArgumentException(myIdFile.toString()
                         + " file is missing");

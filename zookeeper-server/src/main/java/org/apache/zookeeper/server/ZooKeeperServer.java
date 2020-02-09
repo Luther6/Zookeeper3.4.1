@@ -417,7 +417,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         //启动会话处理器
         startSessionTracker();
-        //启动单机模式下Request 处理器链
+        //启动单机模式下Request 处理器链(如果是集群启动的话,那么就会启动对应的zkServer的处理链)
         setupRequestProcessors();
         //注册JMX
         registerJMX();
@@ -433,7 +433,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
          * 三个处理器形成一条链来链式处理请求顺序为PrepRequestProcessor->SyncRequestProcessor->FinalRequestProcessor
          * 前两个处理器都会存储自己的下一个处理器是谁来实现链式调用。并且FinalRequestProcessor 并没有实现为线程
          *
-         * 简单总结:
+         * 简单总结:pr
          */
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor syncProcessor = new SyncRequestProcessor(this,
@@ -740,6 +740,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
     
     public void submitRequest(Request si) {
+        //下面代码主要是用来处理在集群模式下领导者选举还没完成时。客户端连接上了zookeeper(back)
+        //但是如果领导者选举和数据同步等工作没有完成的话,处理请求的processor并未生成,这里为null
+        //所以它会在下面的代码中wait住
         if (firstProcessor == null) {
             synchronized (this) {
                 try {
@@ -764,6 +767,25 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
                 //添加到队列由firstProcessor 线程处理
+                /**
+                 * 不同模式下的处理流程
+                 * 1、单机模式
+                 *  PrepRequestProcessor -> SyncRequestProcessor ->  FinalRequestProcessor
+                 * 2、集群模式下
+                 *    leader:
+                 *        PrepRequestProcessor -> ProposalRequestProcessor -> CommitProcessor -> toBeAppliedProcessor -> FinalRequestProcessor
+                 *
+                 *    follower:
+                 *        FollowerRequestProcessor -> CommitProcessor -> FinalRequestProcessor
+                 *        SyncRequestProcessor -> SendAckRequestProcessor
+                 *
+                 *    observer:
+                 *        ObserverRequestProcessor -> CommitProcessor -> FinalRequestProcessor
+                 *         if (syncRequestProcessorEnabled) {
+                 *             syncProcessor = new SyncRequestProcessor(this, null);
+                 *             syncProcessor.start();
+                 *         }
+                 */
                 firstProcessor.processRequest(si);
                 if (si.cnxn != null) {
                     incInProcess();

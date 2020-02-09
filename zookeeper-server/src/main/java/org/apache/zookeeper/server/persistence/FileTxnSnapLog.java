@@ -172,8 +172,8 @@ public class FileTxnSnapLog {
      */
     public long restore(DataTree dt, Map<Long, Integer> sessions, 
             PlayBackListener listener) throws IOException {
-        snapLog.deserialize(dt, sessions);
-        return fastForwardFromEdits(dt, sessions, listener);
+        snapLog.deserialize(dt, sessions); //从快照中加载节点
+        return fastForwardFromEdits(dt, sessions, listener);//从事务日志中加载节点  并更新lastProcessedZxid
     }
 
     /**
@@ -210,7 +210,7 @@ public class FileTxnSnapLog {
                     highestZxid = hdr.getZxid();
                 }
                 try {
-                    processTransaction(hdr,dt,sessions, itr.getTxn());
+                    processTransaction(hdr,dt,sessions, itr.getTxn());//从事务日志中加载节点  并更新lastProcessedZxid
                 } catch(KeeperException.NoNodeException e) {
                    throw new IOException("Failed to process transaction type: " +
                          hdr.getType() + " error: " + e.getMessage(), e);
@@ -250,7 +250,7 @@ public class FileTxnSnapLog {
                                 + ((CreateSessionTxn) txn).getTimeOut());
             }
             // give dataTree a chance to sync its lastProcessedZxid
-            rc = dt.processTxn(hdr, txn);
+            rc = dt.processTxn(hdr, txn); //处理事务日志
             break;
         case OpCode.closeSession:
             sessions.remove(hdr.getClientId());

@@ -40,7 +40,7 @@ public class Follower extends Learner{
     Follower(QuorumPeer self,FollowerZooKeeperServer zk) {
         this.self = self;
         this.zk=zk;
-        this.fzk = zk;
+        this.fzk = zk; //并未监听投票端口 注意follower存了zkServer
     }
 
     @Override
@@ -69,8 +69,8 @@ public class Follower extends Learner{
         try {
             QuorumServer leaderServer = findLeader();            
             try {
-                connectToLeader(leaderServer.addr, leaderServer.hostname);
-                long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO);
+                connectToLeader(leaderServer.addr, leaderServer.hostname); //连接leader的数据同步地址
+                long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO); //获得最新的epoch与zxid
 
                 //check to see if the leader zxid is lower than ours
                 //this should never happen but is just a safety check
@@ -80,10 +80,10 @@ public class Follower extends Learner{
                             + " is less than our accepted epoch " + ZxidUtils.zxidToString(self.getAcceptedEpoch()));
                     throw new IOException("Error: Epoch of leader is lower");
                 }
-                syncWithLeader(newEpochZxid);                
+                syncWithLeader(newEpochZxid);//同步处理数据
                 QuorumPacket qp = new QuorumPacket();
-                while (this.isRunning()) {
-                    readPacket(qp);
+                while (this.isRunning()) {  //开始循环的读取leader发送过来的请求  ping  commit request等
+                    readPacket(qp);//读
                     processPacket(qp);
                 }
             } catch (Exception e) {
@@ -112,7 +112,7 @@ public class Follower extends Learner{
         case Leader.PING:            
             ping(qp);            
             break;
-        case Leader.PROPOSAL:            
+        case Leader.PROPOSAL:          //leader 发来的改变节点的请求
             TxnHeader hdr = new TxnHeader();
             Record txn = SerializeUtils.deserializeTxn(qp.getData(), hdr);
             if (hdr.getZxid() != lastQueued + 1) {
@@ -121,11 +121,11 @@ public class Follower extends Learner{
                         + " expected 0x"
                         + Long.toHexString(lastQueued + 1));
             }
-            lastQueued = hdr.getZxid();
-            fzk.logRequest(hdr, txn);
+            lastQueued = hdr.getZxid();//
+            fzk.logRequest(hdr, txn);//加载请求
             break;
         case Leader.COMMIT:
-            fzk.commit(qp.getZxid());
+            fzk.commit(qp.getZxid());//follower接收到此次操作的成功信号 之前已经在syncProcessor打了快照与事务,直接在内存中挂载节点(^-^)
             break;
         case Leader.UPTODATE:
             LOG.error("Received an UPTODATE message after Follower started");

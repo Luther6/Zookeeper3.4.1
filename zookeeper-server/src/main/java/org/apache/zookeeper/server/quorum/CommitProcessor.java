@@ -74,19 +74,19 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
             while (!finished) {
                 int len = toProcess.size();
                 for (int i = 0; i < len; i++) {
-                    nextProcessor.processRequest(toProcess.get(i));
+                    nextProcessor.processRequest(toProcess.get(i));//进行下面的处理 ^-^
                 }
                 toProcess.clear();
                 synchronized (this) {
-                    if ((queuedRequests.size() == 0 || nextPending != null)
+                    if ((queuedRequests.size() == 0 || nextPending != null)//1、queueRequests不为空 nextPending为空 2、二次循环满足条件
                             && committedRequests.size() == 0) {
-                        wait();
+                        wait(); //在处理client直接发往leader的请求时,commitProcessor会wait()在这里  end唤醒 committedRequests添加了刚刚的请求
                         continue;
                     }
                     // First check and see if the commit came in for the pending
                     // request
-                    if ((queuedRequests.size() == 0 || nextPending != null)
-                            && committedRequests.size() > 0) {
+                    if ((queuedRequests.size() == 0 || nextPending != null) //queuedRequests不为空 nextPending不为空
+                            && committedRequests.size() > 0) {// 二次成功
                         Request r = committedRequests.remove();
                         /*
                          * We match with nextPending so that we can move to the
@@ -102,7 +102,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
                             nextPending.hdr = r.hdr;
                             nextPending.txn = r.txn;
                             nextPending.zxid = r.zxid;
-                            toProcess.add(nextPending);
+                            toProcess.add(nextPending);//添加到toProcess中
                             nextPending = null;
                         } else {
                             // this request came from someone else so just
@@ -130,7 +130,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
                         case OpCode.setACL:
                         case OpCode.createSession:
                         case OpCode.closeSession:
-                            nextPending = request;
+                            nextPending = request;//为nextPendIng赋值
                             break;
                         case OpCode.sync:
                             if (matchSyncs) {
@@ -163,8 +163,8 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing request:: " + request);
             }
-            committedRequests.add(request);
-            notifyAll();
+            committedRequests.add(request);//committedRequests添加刚刚的请求
+            notifyAll();//唤醒刚刚在commitProcessor中await的线程
         }
     }
 

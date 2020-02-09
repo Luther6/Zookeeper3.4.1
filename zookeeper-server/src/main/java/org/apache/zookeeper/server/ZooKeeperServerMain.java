@@ -50,7 +50,7 @@ public class ZooKeeperServerMain {
      * @param args the configfile or the port datadir [ticktime]
      */
     public static void main(String[] args) {
-        //实例化一个用于启动与运行单机模式的实例对象
+        //实例化一个用于启动与运行单机模式的实例对象  客户端
         ZooKeeperServerMain main = new ZooKeeperServerMain();
         try {
             main.initializeAndRun(args);

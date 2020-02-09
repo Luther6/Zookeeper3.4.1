@@ -113,6 +113,7 @@ public class QuorumPeerMain {
         purgeMgr.start();
         //根据配置文件来判断是启动单机模式还是启动集群模式.
         if (args.length == 1 && config.servers.size() > 0) {
+            // 集群启动
             runFromConfig(config);
         } else {
             LOG.warn("Either no config or no quorum defined in config, running "
@@ -124,6 +125,7 @@ public class QuorumPeerMain {
 
     public void runFromConfig(QuorumPeerConfig config) throws IOException {
       try {
+          //配置日志信息
           ManagedUtil.registerLog4jMBeans();
       } catch (JMException e) {
           LOG.warn("Unable to register log4j JMX control", e);
@@ -132,12 +134,13 @@ public class QuorumPeerMain {
       LOG.info("Starting quorum peer");
       try {
           ServerCnxnFactory cnxnFactory = ServerCnxnFactory.createFactory();
+          //与单机模式下一样
           cnxnFactory.configure(config.getClientPortAddress(),
                                 config.getMaxClientCnxns());
 
           quorumPeer = getQuorumPeer();
 
-          quorumPeer.setQuorumPeers(config.getServers());
+          quorumPeer.setQuorumPeers(config.getServers()); //设置配置中读取到的所有zookeeper 包括observer
           quorumPeer.setTxnFactory(new FileTxnSnapLog(
                   new File(config.getDataLogDir()),
                   new File(config.getDataDir())));
@@ -148,11 +151,11 @@ public class QuorumPeerMain {
           quorumPeer.setSyncLimit(config.getSyncLimit());
           quorumPeer.setQuorumListenOnAllIPs(config.getQuorumListenOnAllIPs());
           quorumPeer.setCnxnFactory(cnxnFactory);
-          quorumPeer.setQuorumVerifier(config.getQuorumVerifier());
-          quorumPeer.setClientPortAddress(config.getClientPortAddress());
+          quorumPeer.setQuorumVerifier(config.getQuorumVerifier()); //设置过半阀值
+          quorumPeer.setClientPortAddress(config.getClientPortAddress());//设置接收客户端数据地址
           quorumPeer.setMinSessionTimeout(config.getMinSessionTimeout());
           quorumPeer.setMaxSessionTimeout(config.getMaxSessionTimeout());
-          quorumPeer.setZKDatabase(new ZKDatabase(quorumPeer.getTxnFactory()));
+          quorumPeer.setZKDatabase(new ZKDatabase(quorumPeer.getTxnFactory()));//初始化zookeeper树结构并且创建默认节点
           quorumPeer.setLearnerType(config.getPeerType());
           quorumPeer.setSyncEnabled(config.getSyncEnabled());
 
@@ -166,10 +169,10 @@ public class QuorumPeerMain {
               quorumPeer.setQuorumLearnerLoginContext(config.quorumLearnerLoginContext);
           }
 
-          quorumPeer.setQuorumCnxnThreadsSize(config.quorumCnxnThreadsSize);
-          quorumPeer.initialize();
+          quorumPeer.setQuorumCnxnThreadsSize(config.quorumCnxnThreadsSize); //未知
+          quorumPeer.initialize(); //进行一些关于权限的初始化动作
 
-          quorumPeer.start();
+          quorumPeer.start();//真正开始集群模式下的流程处理
           quorumPeer.join();
       } catch (InterruptedException e) {
           // warn, but generally this is ok

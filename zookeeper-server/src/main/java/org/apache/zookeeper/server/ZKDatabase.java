@@ -217,7 +217,7 @@ public class ZKDatabase {
      * @throws IOException
      */
     public long loadDataBase() throws IOException {
-        long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
+        long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener); //将我们创建的节点从文件中加载到内存中，并获取改文件的最大zxid:代表数据的及时情况
         initialized = true;
         return zxid;
     }
@@ -251,9 +251,9 @@ public class ZKDatabase {
         WriteLock wl = logLock.writeLock();
         try {
             wl.lock();
-            if (committedLog.size() > commitLogCount) {
+            if (committedLog.size() > commitLogCount) { //最大500个
                 committedLog.removeFirst();
-                minCommittedLog = committedLog.getFirst().packet.getZxid();
+                minCommittedLog = committedLog.getFirst().packet.getZxid();//zxid 之后好好分析
             }
             if (committedLog.size() == 0) {
                 minCommittedLog = request.zxid;
@@ -266,7 +266,7 @@ public class ZKDatabase {
             Proposal p = new Proposal();
             p.packet = pp;
             p.request = request;
-            committedLog.add(p);
+            committedLog.add(p);//这些数据流待之后leader用来同步热数据给follwer
             maxCommittedLog = p.packet.getZxid();
         } finally {
             wl.unlock();

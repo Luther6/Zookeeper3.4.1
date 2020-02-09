@@ -72,7 +72,7 @@ public class FileSnap implements SnapShot {
         // we run through 100 snapshots (not all of them)
         // if we cannot get it running within 100 snapshots
         // we should  give up
-        List<File> snapList = findNValidSnapshots(100);
+        List<File> snapList = findNValidSnapshots(100); //寻找合法的日志文件最多寻找100个快照文件
         if (snapList.size() == 0) {
             return -1L;
         }
@@ -107,7 +107,7 @@ public class FileSnap implements SnapShot {
         if (!foundValid) {
             throw new IOException("Not able to find valid snapshots in " + snapDir);
         }
-        dt.lastProcessedZxid = Util.getZxidFromName(snap.getName(), SNAPSHOT_FILE_PREFIX);
+        dt.lastProcessedZxid = Util.getZxidFromName(snap.getName(), SNAPSHOT_FILE_PREFIX); //获取到改zookeeper最后修改的id序列号
         return dt.lastProcessedZxid;
     }
 

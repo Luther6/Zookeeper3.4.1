@@ -71,7 +71,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
         if(request instanceof LearnerSyncRequest){
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {
-                nextProcessor.processRequest(request);
+                nextProcessor.processRequest(request);//to
             if (request.hdr != null) {
                 // We need to sync and get consensus on any transactions
                 try {
@@ -79,7 +79,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
-                syncProcessor.processRequest(request);
+                syncProcessor.processRequest(request);//这里直接进行写日志  与follower同步
             }
         }
     }

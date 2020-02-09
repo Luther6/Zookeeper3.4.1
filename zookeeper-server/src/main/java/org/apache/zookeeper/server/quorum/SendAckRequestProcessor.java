@@ -37,12 +37,12 @@ public class SendAckRequestProcessor implements RequestProcessor, Flushable {
         this.learner = peer;
     }
 
-    public void processRequest(Request si) {
+    public void processRequest(Request si) {//集群模式下follower接受到leader的响应 写完数据直接成功后给leader响应
         if(si.type != OpCode.sync){
             QuorumPacket qp = new QuorumPacket(Leader.ACK, si.hdr.getZxid(), null,
                 null);
             try {
-                learner.writePacket(qp, false);
+                learner.writePacket(qp, false);//发送给leader
             } catch (IOException e) {
                 LOG.warn("Closing connection to leader, exception during packet send", e);
                 try {
